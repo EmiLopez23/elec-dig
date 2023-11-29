@@ -6,10 +6,10 @@ const mongoUri = 'mongodb://' + config.mongodb.hostname + ':' + config.mongodb.p
 
 const client = new MongoClient(mongoUri);
 
-async function insertData(doc) {
+async function insertData(collection,doc) {
   try {
     const database = client.db(config.mongodb.database);
-    const messageCollection = database.collection("message");
+    const messageCollection = database.collection(collection);
 
     const result = await messageCollection.insertOne(doc);
 
@@ -24,34 +24,21 @@ function connectAndSubscribe() {
   const mqttClient = mqtt.connect(mqttUri);
 
   mqttClient.on("connect", () => {
-    mqttClient.subscribe("#", (err) => {
+    mqttClient.subscribe(["create-transaction"], (err) => {
       if (!err) {
         console.log("MQTT client connected and subscribed to all topics");
       }
-    });
-
-    const database = client.db(config.mongodb.database);
-    const messageCollection = database.collection("message");
-    const messages = async() => await messageCollection.find({}).toArray();
-
-    setInterval(async() => {
-      console.log("Publishing message from db");
-      const messages = await messageCollection.find({}).toArray();
-      const messageString = JSON.stringify(messages);
-      mqttClient.publish("fromDB", messageString);
-    }, 5000);
-    
+    });    
   });
 
   mqttClient.on("message", (topic, message) => {
-    // Message received from MQTT
-    console.log("MQTT Message:", message.toString());
 
-    // Insert the MQTT message into MongoDB
-    insertData({
+    insertData("transactions",{
       fecha: new Date(),
       content: message.toString()
     });
+
+    mqttClient.publish("txn-status", message)
   });
 }
 
